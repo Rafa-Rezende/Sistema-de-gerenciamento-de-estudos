@@ -4,6 +4,7 @@ source "$(dirname "$0")/lib.sh"
 in=$(cat); f=$(json_get file_path); r=$(raiz)
 case "$f" in
   "$r/index.html")     bloquear "index.html é gerado: edite src/ (pagina.html, planejador.js, app.js); o hook remonta sozinho." ;;
+  "$r"/publico/*)       bloquear "publico/ é gerado pelo montar.js: edite src/, marca/ ou montar.js." ;;
   */node_modules/*)    bloquear "node_modules não se edita." ;;
   */.env|*/.env.*)     bloquear ".env tem segredos: peça ao usuário para editar." ;;
 esac

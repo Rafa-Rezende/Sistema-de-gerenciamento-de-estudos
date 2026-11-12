@@ -24,6 +24,7 @@ const I = {
   pizza:'<path d="M12 3l9 16H3z"/><circle cx="10" cy="13" r="1"/><circle cx="14" cy="15" r="1"/>',
   x:'<path d="M6 6l12 12M18 6L6 18"/>'
 };
+const LOGO = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" aria-hidden="true" focusable="false"><rect width="512" height="512" rx="112" fill="#FAF8F3"/><path d="M112 400 C 236 400 152 256 256 256 C 360 256 276 112 400 112" transform="translate(10 12)" fill="none" stroke="#BFE3CB" stroke-width="96" stroke-linecap="round"/><path d="M112 400 C 236 400 152 256 256 256 C 360 256 276 112 400 112" fill="none" stroke="#24304A" stroke-width="40" stroke-linecap="round"/><circle cx="112" cy="400" r="58" fill="#A98FE3" stroke="#24304A" stroke-width="24"/><circle cx="256" cy="256" r="50" fill="#7CC79B" stroke="#24304A" stroke-width="24"/><path d="M408 104 L 470 78 L 408 50 Z" fill="#F2A488" stroke="#24304A" stroke-width="20" stroke-linejoin="round"/><path d="M400 120 V 44" stroke="#24304A" stroke-width="28" stroke-linecap="round"/></svg>`;
 const svg = (n, extra='') => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ${extra}>${I[n]}</svg>`;
 
 /* ---------- utils ---------- */
@@ -90,7 +91,7 @@ let toastT;
 function toast(msg, ms=2800){ const t=$('#toast'); t.textContent=msg; t.hidden=false; clearTimeout(toastT); toastT=setTimeout(()=>t.hidden=true,ms); }
 function errMsg(e){
   const c = e && e.code;
-  if(c==='invalid_argument') return 'Você não tem permissão para salvar aqui (abra como dono do painel).';
+  if(c==='invalid_argument') return naWeb() ? 'Sua sessão expirou. Recarregue a página e entre de novo.' : 'Você não tem permissão para salvar aqui (abra como dono do painel).';
   if(c==='quota_exceeded') return 'Limite de armazenamento do painel atingido. Apague sessões antigas.';
   if(c==='resource_exhausted') return 'Muitas alterações seguidas. Espere um instante e tente de novo.';
   return 'Não consegui salvar agora. Verifique a conexão e tente de novo.';
@@ -437,6 +438,7 @@ function viewRotina(){
       <div class="what-static"><div class="t">${e.livre?'Dia livre':e.sem?'Sem estudo':'Ocupado'}</div><div class="m">${(e.ranges||[]).map(r=>`${esc(r.start)}–${esc(showHM(r.end))}${r.note?' '+esc(r.note):''}`).join(' · ')}${e.note?' '+esc(e.note):''}</div></div>
       <button class="check" data-act="delday" data-date="${esc(d)}" aria-label="Remover mudança de ${esc(fmtDay(d))}">${svg('x')}</button></div>`).join('') : '<div class="empty"><b>Nenhuma mudança marcada</b>Use “Mudou o dia?” quando ganhar folga ou tiver um imprevisto.</div>'}</div>
   </section></div>`;
+  if(naWeb() && S.email) html += `<section class="card" style="margin-top:16px;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap"><div><b>Conta</b><div class="note">Entrou como ${esc(S.email)}</div></div><button class="btn" data-act="sair">Sair</button></section>`;
   return html;
 }
 function shiftRow(sh,i){ return `<div class="shift"><select aria-label="Dia do turno ${i+1}" data-k="day">${WDL.map((d,j)=>`<option value="${j}" ${Number(sh.day)===j?'selected':''}>${d}</option>`).join('')}</select><input type="time" aria-label="Início" data-k="start" value="${esc(sh.start)}"><span>às</span><input type="time" aria-label="Fim" data-k="end" value="${esc(sh.end==='24:00'?'00:00':sh.end)}"><button type="button" class="nav-arrow" data-act="rmshift" aria-label="Remover turno">${svg('x')}</button></div>`; }
@@ -457,7 +459,39 @@ function syncPayload(){
     .map(s=>({titulo: titleOf(s), inicio: `${s.date} ${s.start}`, fim: s.end==='24:00'? `${addDays(s.date,1)} 00:00` : `${s.date} ${s.end}`, notas: [S.subjects[s.subject]?S.subjects[s.subject].name:'', s.note||''].filter(Boolean).join(' · ')}));
   return {calendario:'Estudos', geradoEm:`${t} ${nm}`, eventos:evs};
 }
+/* ---------- calendário assinado (só no site) ---------- */
+async function lerLinkCalendario(){
+  const {data, error} = await S.sb.from('calendarios').select('token').maybeSingle();
+  S.cal = error ? {erro:true} : {token: data ? data.token : null}; if(S.view==='iphone') render();
+}
+async function criarLinkCalendario(trocar){
+  if(trocar){ const {error} = await S.sb.from('calendarios').delete().eq('user_id', (await S.sb.auth.getUser()).data.user.id); if(error){ toast('Não consegui trocar o link agora.'); return; } }
+  const {data, error} = await S.sb.from('calendarios').insert({}).select('token').single();
+  if(error){ toast('Não consegui criar o link agora. Tente de novo.'); return; }
+  S.cal = {token:data.token}; render(); toast(trocar ? 'Link novo criado. O antigo parou de funcionar.' : 'Link do calendário criado.');
+}
+function viewIphoneWeb(){
+  if(!S.cal){ lerLinkCalendario(); return header('Calendário do iPhone','') + '<div class="loading"><div class="spin"></div>Buscando o seu link de calendário…</div>'; }
+  const base = CONF.supabaseUrl.replace(/\/$/,'') + '/functions/v1/calendario?t=';
+  const https = S.cal.token ? base + S.cal.token : '';
+  const webcal = https.replace(/^https:/, 'webcal:');
+  let html = header('Calendário do iPhone', 'Assine o seu plano uma vez: o iPhone atualiza sozinho quando o plano muda.');
+  html += `<div class="grid dash"><section class="card"><div class="card-h"><h2>${svg('phone')}Link do calendário</h2></div>`;
+  if(S.cal.erro) html += `<div class="empty"><b>Não consegui buscar o link</b>Recarregue a página e tente de novo.</div>`;
+  else if(!S.cal.token) html += `<p class="note">O link é secreto e só serve para ler o seu plano. Crie uma vez e assine no iPhone.</p><button class="btn primary" data-act="cal-criar">${svg('plus')}Criar link do calendário</button>`;
+  else html += `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px"><a class="btn primary" href="${esc(webcal)}">${svg('cal')}Assinar no iPhone</a><button class="btn" data-act="cal-copiar">${svg('copy')}Copiar link</button></div>
+    <div class="field"><label for="cal-link">Link (não compartilhe: quem tiver ele vê o seu plano)</label><input id="cal-link" readonly value="${esc(https)}"></div>
+    <p class="note">Mostra as sessões ainda não feitas, de ontem em diante, com alerta 15 min antes. O iPhone busca de novo a cada hora, mais ou menos.</p>
+    <button class="btn danger" data-act="cal-novo">Trocar o link</button>`;
+  html += `</section><section class="card"><div class="card-h"><h2>${svg('code')}Como assinar</h2></div><ol class="steps">
+    <li><div><b>Pelo iPhone</b><p class="note">Abra o Rota no Safari do iPhone, venha nesta aba e toque em <b>Assinar no iPhone</b>. Confirme em <b>Assinar</b>.</p></div></li>
+    <li><div><b>Ou pelos Ajustes</b><p class="note">Copie o link aqui. No iPhone: Ajustes → Apps → Calendário → Contas → Adicionar Conta → Outra → <b>Adicionar Calendário Assinado</b> → cole o link → Seguinte → Salvar.</p></div></li>
+    <li><div><b>Pronto</b><p class="note">O calendário aparece como “Estudos”. Não precisa mais copiar agenda nem rodar atalho. Se tinha montado o atalho “Sincronizar Estudos”, pode apagar ele e o calendário antigo.</p></div></li>
+  </ol></section></div>`;
+  return html;
+}
 function viewIphone(){
+  if(naWeb() && S.sb) return viewIphoneWeb();
   const set = S.settings.main||{}; const p = syncPayload(); const json = JSON.stringify(p);
   let html = header('Calendário do iPhone', 'Envie suas sessões para um calendário “Estudos” no app Calendário. Sincronize de novo sempre que o plano mudar.');
   html += `<div class="grid dash">
@@ -637,6 +671,8 @@ async function deleteTrilha(sid){
 function render(){
   renderNav();
   const main = $('#main');
+  document.body.classList.toggle('sem-login', !!S.precisaLogin);
+  if(S.precisaLogin && !S.error){ main.innerHTML = viewLogin(); const f=$('#lg-codigo')||$('#lg-email'); if(f) f.focus(); return; }
   if(S.error){ main.innerHTML = `<div class="card empty" style="margin-top:20px"><b>Não consegui abrir o plano</b>${esc(S.error)}</div>`; return; }
   if(!ready()){ main.innerHTML = `<div class="loading"><div class="spin"></div>${S.stale?'O banco do painel ainda não respondeu. Verifique a conexão; os dados aparecem assim que ele responder.':'Carregando seu plano de estudos…'}</div>`; return; }
   const scrollY = window.scrollY;
@@ -652,16 +688,17 @@ document.addEventListener('click', e=>{
   const el = e.target.closest('[data-act]'); if(!el) return;
   const a = el.dataset.act;
   if(a==='scrim'){ if(e.target===el) closeModal(); return; }
-  if(!['delsess','deltrilha','deltask'].includes(a) && armed){ armed.classList.remove('armed'); armed.textContent = armed.dataset.label; armed=null; }
+  if(!['delsess','deltrilha','deltask','cal-novo'].includes(a) && armed){ armed.classList.remove('armed'); armed.textContent = armed.dataset.label; armed=null; }
   switch(a){
     case 'toggle': toggleSession(el.dataset.id); break;
     case 'edit': openEditor(el.dataset.id); break;
     case 'new': openEditor(null, Object.assign({}, el.dataset.date?{date:el.dataset.date}:{}, el.dataset.type?{type:el.dataset.type}:{}, el.dataset.subject?{subject:el.dataset.subject}:{} )); break;
     case 'close': closeModal(); break;
     case 'savesess': saveSession(); break;
-    case 'delsess': case 'deltrilha': case 'deltask':
-      if(armed!==el){ if(armed){ armed.classList.remove('armed'); armed.textContent=armed.dataset.label; } el.dataset.label=el.textContent; el.classList.add('armed'); el.textContent='Toque de novo para apagar'; armed=el; return; }
+    case 'delsess': case 'deltrilha': case 'deltask': case 'cal-novo':
+      if(armed!==el){ if(armed){ armed.classList.remove('armed'); armed.textContent=armed.dataset.label; } el.dataset.label=el.textContent; el.classList.add('armed'); el.textContent = a==='cal-novo' ? 'Toque de novo para trocar' : 'Toque de novo para apagar'; armed=el; return; }
       armed=null;
+      if(a==='cal-novo'){ criarLinkCalendario(true); break; }
       if(a==='delsess'){ const id=el.dataset.id; delete S.sessions[id]; closeModal(); render(); delDoc('sessions', id); toast('Sessão apagada.'); }
       else if(a==='deltask'){ const id=el.dataset.id; delete S.tasks[id]; closeModal(); render(); delDoc('tasks', id).then(()=>replan('Trabalho apagado.')); }
       else deleteTrilha(el.dataset.sid);
@@ -682,6 +719,10 @@ document.addEventListener('click', e=>{
     case 'imprevisto': openImprevisto(el.dataset.date, el.dataset.kind); break;
     case 'saveimp': saveImprevisto(); break;
     case 'replan': replan(''); break;
+    case 'login-voltar': S.login.etapa='email'; S.login.erro=''; render(); break;
+    case 'sair': S.sb && S.sb.auth.signOut(); break;
+    case 'cal-criar': criarLinkCalendario(false); break;
+    case 'cal-copiar': { const t=$('#cal-link'); try{ navigator.clipboard.writeText(t.value).then(()=>toast('Link copiado.'), ()=>{ t.focus(); t.select(); }); }catch(_){ t.focus(); t.select(); } break; }
     case 'theme': setTheme(isDarkNow()?'light':'dark'); break;
     case 'themeset': setTheme(el.dataset.t); render(); break;
     case 'saverotina': saveRotina(); break;
@@ -694,6 +735,7 @@ document.addEventListener('click', e=>{
       break; }
   }
 });
+document.addEventListener('submit', e=>{ if(e.target.id==='f-login'){ e.preventDefault(); enviarLogin(e.target); } });
 document.addEventListener('keydown', e=>{
   if(e.key==='Escape' && M) closeModal();
   if((e.key==='Enter'||e.key===' ') && e.target.matches('[role="button"][data-act]')){ e.preventDefault(); e.target.click(); }
@@ -706,14 +748,77 @@ document.addEventListener('change', e=>{
 });
 window.addEventListener('hashchange', route);
 
+/* ---------- onde os dados ficam: banco do artefato (claude.ai) ou Supabase (site) ---------- */
+const SUPABASE_JS = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js';
+const CONF = window.ROTA_CONFIG || {};
+const naWeb = () => !(window.claude && window.claude.use);
+const COLECOES = ['subjects','sessions','progress','settings','tasks','days'];
+function carregarScript(src){ return new Promise((ok, falha)=>{ const el=document.createElement('script'); el.src=src; el.onload=ok; el.onerror=()=>falha(new Error('script')); document.head.appendChild(el); }); }
+function erroSupabase(e){ const msg=(e&&e.message)||''; return {code: (e&&e.code)==='42501' || /row-level security|JWT/i.test(msg) ? 'invalid_argument' : 'unavailable', message: msg}; }
+// Mesma interface que o app usa no banco do artefato: collection(c).onSnapshot / doc(id).set / doc(id).delete
+function bancoSupabase(sb, uid){
+  const cols = {}, subs = {};
+  const emitir = col => { const m = cols[col] || new Map(); const snap = {docs:[...m].map(([id,v])=>({id, data:()=>v})), metadata:{fromCache:false, hasPendingWrites:false}}; (subs[col]||[]).forEach(f=>f(snap)); };
+  const carregar = async (col, err) => {
+    const {data, error} = await sb.from('documentos').select('id,dados').eq('user_id', uid).eq('colecao', col).limit(5000);
+    if(error){ if(err) err(erroSupabase(error)); return; }
+    cols[col] = new Map(data.map(r=>[r.id, r.dados])); emitir(col);
+  };
+  sb.channel('rota-'+uid).on('postgres_changes', {event:'*', schema:'public', table:'documentos', filter:'user_id=eq.'+uid}, p=>{
+    const r = p.eventType==='DELETE' ? p.old : p.new; if(!r || !r.colecao || !cols[r.colecao]) return;
+    if(r.user_id && r.user_id!==uid) return;
+    if(p.eventType==='DELETE') cols[r.colecao].delete(r.id); else cols[r.colecao].set(r.id, r.dados);
+    emitir(r.colecao);
+  }).subscribe();
+  return {
+    recarregar(){ Object.keys(subs).forEach(col=>carregar(col)); },
+    collection(col){ return {
+      onSnapshot(next, err){ (subs[col]=subs[col]||[]).push(next); carregar(col, err); return ()=>{ subs[col]=(subs[col]||[]).filter(f=>f!==next); }; },
+      doc(id){ return {
+        async set(dados){ const {error} = await sb.from('documentos').upsert({user_id:uid, colecao:col, id, dados, atualizado_em:new Date().toISOString()}); if(error) throw erroSupabase(error); (cols[col]=cols[col]||new Map()).set(id, dados); emitir(col); },
+        async delete(){ const {error} = await sb.from('documentos').delete().match({user_id:uid, colecao:col, id}); if(error) throw erroSupabase(error); if(cols[col]) cols[col].delete(id); emitir(col); }
+      }; }
+    }; }
+  };
+}
+
+/* ---------- login (só no site) ---------- */
+function viewLogin(){
+  const a = S.login;
+  const corpo = a.etapa==='codigo'
+    ? `<p>Enviamos um código de 6 dígitos para <b>${esc(a.email)}</b>. Ele vale por 1 hora.</p>
+       <form id="f-login" class="login-form" data-etapa="codigo"><div class="field"><label for="lg-codigo">Código</label><input id="lg-codigo" inputmode="numeric" autocomplete="one-time-code" maxlength="6" pattern="[0-9]{6}" required></div>
+       <button class="btn primary" type="submit" ${a.enviando?'disabled':''}>${a.enviando?'Entrando…':'Entrar'}</button><button type="button" class="btn ghost" data-act="login-voltar">Usar outro e-mail</button></form>`
+    : `<p>Entre com o seu e-mail. Você recebe um código, sem senha.</p>
+       <form id="f-login" class="login-form" data-etapa="email"><div class="field"><label for="lg-email">E-mail</label><input id="lg-email" type="email" autocomplete="email" required value="${esc(a.email||'')}"></div>
+       <button class="btn primary" type="submit" ${a.enviando?'disabled':''}>${a.enviando?'Enviando…':'Enviar código'}</button></form>`;
+  return `<div class="login"><section class="card login-card"><div class="login-logo">${LOGO}</div><h1>Rota de Estudos</h1>${corpo}${a.erro?`<p class="login-erro" role="alert">${esc(a.erro)}</p>`:''}</section></div>`;
+}
+async function enviarLogin(form){
+  const a = S.login; if(a.enviando) return;
+  a.erro=''; a.enviando=true;
+  try{
+    if(form.dataset.etapa==='email'){
+      a.email = $('#lg-email').value.trim(); render();
+      const {error} = await S.sb.auth.signInWithOtp({email:a.email, options:{shouldCreateUser:true}});
+      if(error) throw error; a.etapa='codigo';
+    } else {
+      const token = $('#lg-codigo').value.trim(); render();
+      const {error} = await S.sb.auth.verifyOtp({email:a.email, token, type:'email'});
+      if(error) throw error;
+    }
+  }catch(e){
+    a.erro = e && e.status===429 ? 'Muitas tentativas seguidas. Espere um minuto e tente de novo.'
+      : form.dataset.etapa==='email' ? 'Não consegui enviar o código. Confira o e-mail e tente de novo.'
+      : 'Código errado ou vencido. Confira ou peça outro.';
+  }
+  a.enviando=false; render();
+}
+
 /* ---------- boot ---------- */
-async function boot(){
-  renderThemeBtn();
-  route();
-  if(!window.claude || !window.claude.use){ S.error='Abra esta página no claude.ai, com sua conta, para carregar e salvar o plano.'; render(); return; }
-  const db = await window.claude.use('db');
-  if(!db){ S.error='O armazenamento do painel não está disponível nesta visualização. Abra pelo claude.ai com sua conta.'; render(); return; }
-  S.db = db;
+function iniciarDados(db, usuario){
+  if(S.db) return;
+  S.db = db; S.email = usuario ? (usuario.email||'') : ''; S.precisaLogin = false; render();
   const timer = setTimeout(()=>{ S.stale=true; render(); }, 10000);
   const sub = (col) => db.collection(col).onSnapshot(snap=>{
     const m = {}; for(const d of snap.docs){ const v=d.data(); if(v) m[d.id]=Object.assign({id:d.id}, v); }
@@ -721,8 +826,29 @@ async function boot(){
     if(S.busy) return;
     if(!M) render(); else renderNav();
   }, err=>{ clearTimeout(timer); S.error = err && err.code==='revoked' ? 'O acesso a este painel mudou.' : 'Não consegui ler o plano agora. Recarregue a página em instantes.'; render(); });
-  ['subjects','sessions','progress','settings','tasks','days'].forEach(sub);
+  COLECOES.forEach(sub);
+}
+async function bootWeb(){
+  if(!CONF.supabaseUrl || !CONF.supabaseAnonKey){ S.error='Falta configurar o Supabase: o endereço do projeto e a chave pública.'; render(); return; }
+  try{ await carregarScript(SUPABASE_JS); }catch(_){ S.error='Não consegui carregar o Supabase. Verifique a internet e recarregue a página.'; render(); return; }
+  S.sb = window.supabase.createClient(CONF.supabaseUrl, CONF.supabaseAnonKey);
+  S.login = {etapa:'email', email:'', erro:'', enviando:false};
+  S.sb.auth.onAuthStateChange((ev, sess)=>{
+    if(sess && sess.user && !S.db) iniciarDados(bancoSupabase(S.sb, sess.user.id), sess.user);
+    if(ev==='SIGNED_OUT') location.reload();
+  });
+  const {data} = await S.sb.auth.getSession();
+  if(data && data.session) iniciarDados(bancoSupabase(S.sb, data.session.user.id), data.session.user);
+  else { S.precisaLogin = true; render(); }
+  document.addEventListener('visibilitychange', ()=>{ if(document.visibilityState==='visible' && S.db && S.db.recarregar) S.db.recarregar(); });
+}
+async function boot(){
+  renderThemeBtn();
+  route();
+  if(naWeb()){ bootWeb(); return; }
+  const db = await window.claude.use('db');
+  if(!db){ S.error='O armazenamento do painel não está disponível nesta visualização. Abra pelo claude.ai com sua conta.'; render(); return; }
+  iniciarDados(db, null);
 }
 boot();
 })();
-

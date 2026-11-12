@@ -11,14 +11,14 @@ mudados=$( { git diff --cached --name-only; git diff HEAD --name-only 2>/dev/nul
 [ -z "$mudados" ] && exit 0
 problemas=""
 
-if grep -qE '^(src/|test/|montar\.js|index\.html|package\.json)' <<<"$mudados"; then
+if grep -qE '^(src/|test/|supabase/|marca/|montar\.js|index\.html|package\.json|config\.json)' <<<"$mudados"; then
   out=$(node montar.js --verificar 2>&1) || problemas+="$out"$'\n'
   out=$(node --test 2>&1) || problemas+=$'testes:\n'"$( (grep -E '^not ok|AssertionError|expected|actual' <<<"$out" || tail -15 <<<"$out") | head -15)"$'\n'
 fi
 
-# segredos: padrões conhecidos. Só linhas e arquivos novos.
+# segredos: padrões conhecidos (inclui a chave service_role do Supabase; a anon é pública e pode). Só linhas e arquivos novos.
 novo=$( git diff HEAD 2>/dev/null | grep -E '^\+[^+]'; git diff --cached | grep -E '^\+[^+]'; git ls-files --others --exclude-standard -z | xargs -0 cat 2>/dev/null )
-suspeitos=$(grep -E 'AKIA[0-9A-Z]{16}|sk-ant-[A-Za-z0-9_-]{20,}|-----BEGIN [A-Z ]*PRIVATE KEY-----|gh[pousr]_[0-9A-Za-z]{36}|(postgres(ql)?|mysql)://[^:/[:space:]]+:[^@[:space:]]+@' <<<"$novo" \
+suspeitos=$(grep -E 'sb_secret_[A-Za-z0-9_-]{20,}|eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]*(c2VydmljZV9yb2xl|NlcnZpY2Vfcm9sZ|zZXJ2aWNlX3JvbG)|AKIA[0-9A-Z]{16}|sk-ant-[A-Za-z0-9_-]{20,}|-----BEGIN [A-Z ]*PRIVATE KEY-----|gh[pousr]_[0-9A-Za-z]{36}|(postgres(ql)?|mysql)://[^:/[:space:]]+:[^@[:space:]]+@' <<<"$novo" \
   | grep -vE '@(localhost|127\.0\.0\.1)' | head -1)
 [ -n "$suspeitos" ] && problemas+=$'Parece haver uma chave ou URL com senha nas alterações.\n'
 

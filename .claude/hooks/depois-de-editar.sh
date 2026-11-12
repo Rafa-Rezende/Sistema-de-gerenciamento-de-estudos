@@ -7,6 +7,8 @@ case "$f" in
     if [[ $f == *.js ]]; then out=$(node --check "$f" 2>&1) || bloquear "$(head -10 <<<"$out")"; fi
     # o artefato é um arquivo só: remonta para o index.html nunca ficar para trás
     out=$(cd "$r" && node montar.js 2>&1) || bloquear "montar.js: $out" ;;
+  "$r"/supabase/functions/*.mjs)
+    out=$(node --check "$f" 2>&1) || bloquear "$(head -10 <<<"$out")" ;;
   "$r"/test/*.js)
     out=$(node --check "$f" 2>&1) || bloquear "$(head -10 <<<"$out")" ;;
 esac

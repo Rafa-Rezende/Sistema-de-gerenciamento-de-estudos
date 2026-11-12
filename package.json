@@ -1,7 +1,7 @@
 {
   "name": "sistema-de-gerenciamento-de-estudos",
   "private": true,
-  "description": "Rota de Estudos: planejador pessoal das aulas da PUC, prazos, imprevistos e treino de código.",
+  "description": "Rota de Estudos: planejador pessoal das aulas da faculdade, prazos, imprevistos e treino de código.",
   "scripts": {
     "montar": "node montar.js",
     "verificar": "node montar.js --verificar",

@@ -8,6 +8,13 @@ description: Tudo sobre o Rota de Estudos, o app publicado como artefato no clau
 - Código: `src/pagina.html` (CSS, tokens do tema caderno pastel), `src/planejador.js` (função pura `RotaPlanner.buildPlan`), `src/app.js` (telas e banco). `montar.js` (`npm run montar`) junta tudo em `index.html` (gerado; o hook remonta a cada edição).
 - Testes do planejador: `npm test`. O `test/montagem.test.js` garante que o `index.html` está em dia.
 
+## Onde ficam os dados
+
+- **Site (Vercel + Supabase)**: tabela `public.documentos (user_id, colecao, id, dados jsonb, atualizado_em)`, chave `(user_id, colecao, id)`, RLS por `auth.uid()`, no realtime. `public.calendarios (user_id, token)` guarda o link secreto do .ics. As coleções e os campos abaixo valem igual: `dados` é o documento.
+- **Artefato do claude.ai**: banco da capability `db`, mesmas coleções.
+
+Para levar dados de um para o outro: leia as coleções do artefato com `ArtifactData` e gere um `insert ... on conflict do update` em `documentos` (o usuário roda no SQL Editor; ver o `importar-dados.sql` entregue na primeira migração).
+
 ## Banco do artefato (capability `db`)
 
 Regras: `{"db": {"rules": [{"path": "", "read": "view", "write": "admin"}]}, "user": {}}`: só o dono escreve. Coleções:
@@ -40,4 +47,6 @@ Uma Aula está feita quando todas as partes dela estão em `progress`; as outras
 
 ## iPhone
 
-Não há sync direto. O app copia um JSON `{calendario, geradoEm, eventos[{titulo, inicio:"AAAA-MM-DD HH:MM", fim, notas}]}`; o atalho "Sincronizar Estudos" (app Atalhos) apaga os eventos futuros do calendário "Estudos" e recria. Mudou esse formato → o atalho do usuário quebra: avise e atualize os passos na tela iPhone.
+No site: calendário assinado. A função `supabase/functions/calendario` recebe `?t=TOKEN`, lê as sessões, o progresso e as matérias do dono do token e devolve um .ics (horários flutuantes, só sessões não concluídas, de ontem em diante, alerta 15 min antes). O link aparece na aba iPhone (`webcal://`). Mudou o `ics.mjs` → `npm test` e publicar a função de novo.
+
+No artefato do claude.ai não há sync direto. O app copia um JSON `{calendario, geradoEm, eventos[{titulo, inicio:"AAAA-MM-DD HH:MM", fim, notas}]}`; o atalho "Sincronizar Estudos" (app Atalhos) apaga os eventos futuros do calendário "Estudos" e recria. Mudou esse formato → o atalho do usuário quebra: avise e atualize os passos na tela iPhone.

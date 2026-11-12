@@ -1,0 +1,6 @@
+# Configuração usada pelo Supabase CLI ao publicar a função do calendário.
+project_id = "rota-de-estudos"
+
+[functions.calendario]
+# O app Calendário do iPhone não manda login: quem protege é o token secreto no link.
+verify_jwt = false
