@@ -327,6 +327,7 @@ body.sem-login .app{grid-template-columns:minmax(0,1fr)}
 .login-form .field{width:100%}
 .login-form input{font-size:16px}
 .login-erro{color:var(--bad)!important;font-weight:600}
+.login-links{display:flex;flex-wrap:wrap;gap:4px 12px;margin-left:-8px}
 </style>
 
 <div class="app">
@@ -1178,7 +1179,7 @@ function render(){
   renderNav();
   const main = $('#main');
   document.body.classList.toggle('sem-login', !!S.precisaLogin);
-  if(S.precisaLogin && !S.error){ main.innerHTML = viewLogin(); const f=$('#lg-codigo')||$('#lg-email'); if(f) f.focus(); return; }
+  if(S.precisaLogin && !S.error){ main.innerHTML = viewLogin(); const f=$('#lg-email')||$('#lg-senha'); if(f && !f.value) f.focus(); else if($('#lg-senha')) $('#lg-senha').focus(); return; }
   if(S.error){ main.innerHTML = `<div class="card empty" style="margin-top:20px"><b>Não consegui abrir o plano</b>${esc(S.error)}</div>`; return; }
   if(!ready()){ main.innerHTML = `<div class="loading"><div class="spin"></div>${S.stale?'O banco do painel ainda não respondeu. Verifique a conexão; os dados aparecem assim que ele responder.':'Carregando seu plano de estudos…'}</div>`; return; }
   const scrollY = window.scrollY;
@@ -1225,7 +1226,7 @@ document.addEventListener('click', e=>{
     case 'imprevisto': openImprevisto(el.dataset.date, el.dataset.kind); break;
     case 'saveimp': saveImprevisto(); break;
     case 'replan': replan(''); break;
-    case 'login-voltar': S.login.etapa='email'; S.login.erro=''; render(); break;
+    case 'login-etapa': S.login.etapa=el.dataset.etapa; S.login.erro=''; render(); break;
     case 'sair': S.sb && S.sb.auth.signOut(); break;
     case 'cal-criar': criarLinkCalendario(false); break;
     case 'cal-copiar': { const t=$('#cal-link'); try{ navigator.clipboard.writeText(t.value).then(()=>toast('Link copiado.'), ()=>{ t.focus(); t.select(); }); }catch(_){ t.focus(); t.select(); } break; }
@@ -1290,34 +1291,55 @@ function bancoSupabase(sb, uid){
 
 /* ---------- login (só no site) ---------- */
 function viewLogin(){
-  const a = S.login;
-  const corpo = a.etapa==='codigo'
-    ? `<p>Enviamos um código de 6 dígitos para <b>${esc(a.email)}</b>. Ele vale por 1 hora.</p>
-       <form id="f-login" class="login-form" data-etapa="codigo"><div class="field"><label for="lg-codigo">Código</label><input id="lg-codigo" inputmode="numeric" autocomplete="one-time-code" maxlength="6" pattern="[0-9]{6}" required></div>
-       <button class="btn primary" type="submit" ${a.enviando?'disabled':''}>${a.enviando?'Entrando…':'Entrar'}</button><button type="button" class="btn ghost" data-act="login-voltar">Usar outro e-mail</button></form>`
-    : `<p>Entre com o seu e-mail. Você recebe um código, sem senha.</p>
-       <form id="f-login" class="login-form" data-etapa="email"><div class="field"><label for="lg-email">E-mail</label><input id="lg-email" type="email" autocomplete="email" required value="${esc(a.email||'')}"></div>
-       <button class="btn primary" type="submit" ${a.enviando?'disabled':''}>${a.enviando?'Enviando…':'Enviar código'}</button></form>`;
+  const a = S.login; const et = a.etapa;
+  const campoEmail = `<div class="field"><label for="lg-email">E-mail</label><input id="lg-email" type="email" autocomplete="username" required value="${esc(a.email||'')}"></div>`;
+  const campoSenha = (novo) => `<div class="field"><label for="lg-senha">${novo?'Senha nova':'Senha'}</label><input id="lg-senha" type="password" autocomplete="${novo?'new-password':'current-password'}" minlength="${novo?8:1}" required>${novo?'<span class="note">Pelo menos 8 caracteres.</span>':''}</div>`;
+  const botao = (t, tEnv) => `<button class="btn primary" type="submit" ${a.enviando?'disabled':''}>${a.enviando?tEnv:t}</button>`;
+  let corpo;
+  if(et==='criar') corpo = `<p>Crie a sua conta. Depois de criar, desligue novos cadastros no Supabase.</p>
+    <form id="f-login" class="login-form" data-etapa="criar">${campoEmail}${campoSenha(true)}${botao('Criar conta','Criando…')}<button type="button" class="btn ghost" data-act="login-etapa" data-etapa="entrar">Já tenho conta</button></form>`;
+  else if(et==='esqueci') corpo = `<p>Mandamos um link para você criar uma senha nova.</p>
+    <form id="f-login" class="login-form" data-etapa="esqueci">${campoEmail}${botao('Mandar link','Mandando…')}<button type="button" class="btn ghost" data-act="login-etapa" data-etapa="entrar">Voltar</button></form>`;
+  else if(et==='enviado') corpo = `<p>Se <b>${esc(a.email)}</b> tem conta, chega um e-mail com o link para criar uma senha nova. Abra o link neste aparelho.</p><button type="button" class="btn ghost" data-act="login-etapa" data-etapa="entrar">Voltar para entrar</button>`;
+  else if(et==='nova-senha') corpo = `<p>Escolha a senha nova.</p>
+    <form id="f-login" class="login-form" data-etapa="nova-senha">${campoSenha(true)}${botao('Salvar senha','Salvando…')}</form>`;
+  else corpo = `<p>Entre com o seu e-mail e senha.</p>
+    <form id="f-login" class="login-form" data-etapa="entrar">${campoEmail}${campoSenha(false)}${botao('Entrar','Entrando…')}</form>
+    <div class="login-links"><button type="button" class="btn ghost" data-act="login-etapa" data-etapa="esqueci">Esqueci a senha</button><button type="button" class="btn ghost" data-act="login-etapa" data-etapa="criar">Primeira vez? Criar conta</button></div>`;
   return `<div class="login"><section class="card login-card"><div class="login-logo">${LOGO}</div><h1>Rota de Estudos</h1>${corpo}${a.erro?`<p class="login-erro" role="alert">${esc(a.erro)}</p>`:''}</section></div>`;
+}
+function mensagemLogin(e, etapa){
+  const m = ((e && (e.code || e.message)) || '').toString().toLowerCase();
+  if(e && e.status===429 || /rate|too many/.test(m)) return 'Muitas tentativas seguidas. Espere um minuto e tente de novo.';
+  if(/invalid.*credentials|invalid login/.test(m)) return 'E-mail ou senha errados.';
+  if(/not.*confirmed/.test(m)) return 'Falta desligar a confirmação por e-mail no Supabase (Sign In / Providers → Email → Confirm email).';
+  if(/already|registered|exists/.test(m)) return 'Esse e-mail já tem conta. Entre com a senha.';
+  if(/signup.*disabled|signups not allowed/.test(m)) return 'Cadastro de contas novas está desligado neste Rota.';
+  if(/password/.test(m) && /(short|least|weak|characters)/.test(m)) return 'Senha fraca: use pelo menos 8 caracteres, misturando letras e números.';
+  if(etapa==='esqueci') return 'Não consegui mandar o link agora. Tente de novo em alguns minutos.';
+  return 'Não consegui agora. Confira a internet e tente de novo.';
 }
 async function enviarLogin(form){
   const a = S.login; if(a.enviando) return;
-  a.erro=''; a.enviando=true;
+  const etapa = form.dataset.etapa;
+  const email = $('#lg-email') ? $('#lg-email').value.trim() : a.email;
+  const senha = $('#lg-senha') ? $('#lg-senha').value : '';
+  a.email = email; a.erro=''; a.enviando=true; render();
   try{
-    if(form.dataset.etapa==='email'){
-      a.email = $('#lg-email').value.trim(); render();
-      const {error} = await S.sb.auth.signInWithOtp({email:a.email, options:{shouldCreateUser:true}});
-      if(error) throw error; a.etapa='codigo';
-    } else {
-      const token = $('#lg-codigo').value.trim(); render();
-      const {error} = await S.sb.auth.verifyOtp({email:a.email, token, type:'email'});
-      if(error) throw error;
+    if(etapa==='entrar'){ const {error} = await S.sb.auth.signInWithPassword({email, password:senha}); if(error) throw error; }
+    else if(etapa==='criar'){
+      if(senha.length<8) throw {message:'password too short'};
+      const {data, error} = await S.sb.auth.signUp({email, password:senha}); if(error) throw error;
+      if(!data.session) throw {message:'email not confirmed'};
     }
-  }catch(e){
-    a.erro = e && e.status===429 ? 'Muitas tentativas seguidas. Espere um minuto e tente de novo.'
-      : form.dataset.etapa==='email' ? 'Não consegui enviar o código. Confira o e-mail e tente de novo.'
-      : 'Código errado ou vencido. Confira ou peça outro.';
-  }
+    else if(etapa==='esqueci'){ const {error} = await S.sb.auth.resetPasswordForEmail(email, {redirectTo: location.origin + location.pathname}); if(error) throw error; a.etapa='enviado'; }
+    else if(etapa==='nova-senha'){
+      if(senha.length<8) throw {message:'password too short'};
+      const {error} = await S.sb.auth.updateUser({password:senha}); if(error) throw error;
+      a.etapa='entrar'; S.precisaLogin=false; toast('Senha nova salva.');
+      const {data} = await S.sb.auth.getSession(); if(data && data.session) iniciarDados(bancoSupabase(S.sb, data.session.user.id), data.session.user);
+    }
+  }catch(e){ a.erro = mensagemLogin(e, etapa); }
   a.enviando=false; render();
 }
 
@@ -1338,13 +1360,15 @@ async function bootWeb(){
   if(!CONF.supabaseUrl || !CONF.supabaseAnonKey){ S.error='Falta configurar o Supabase: o endereço do projeto e a chave pública.'; render(); return; }
   try{ await carregarScript(SUPABASE_JS); }catch(_){ S.error='Não consegui carregar o Supabase. Verifique a internet e recarregue a página.'; render(); return; }
   S.sb = window.supabase.createClient(CONF.supabaseUrl, CONF.supabaseAnonKey);
-  S.login = {etapa:'email', email:'', erro:'', enviando:false};
+  S.login = {etapa:'entrar', email:'', erro:'', enviando:false};
   S.sb.auth.onAuthStateChange((ev, sess)=>{
-    if(sess && sess.user && !S.db) iniciarDados(bancoSupabase(S.sb, sess.user.id), sess.user);
+    // link de "esqueci a senha": entra com uma sessão temporária e pede a senha nova antes de abrir o app
+    if(ev==='PASSWORD_RECOVERY'){ S.login.etapa='nova-senha'; S.precisaLogin=true; render(); return; }
+    if(sess && sess.user && !S.db && S.login.etapa!=='nova-senha') iniciarDados(bancoSupabase(S.sb, sess.user.id), sess.user);
     if(ev==='SIGNED_OUT') location.reload();
   });
   const {data} = await S.sb.auth.getSession();
-  if(data && data.session) iniciarDados(bancoSupabase(S.sb, data.session.user.id), data.session.user);
+  if(data && data.session && S.login.etapa!=='nova-senha') iniciarDados(bancoSupabase(S.sb, data.session.user.id), data.session.user);
   else { S.precisaLogin = true; render(); }
   document.addEventListener('visibilitychange', ()=>{ if(document.visibilityState==='visible' && S.db && S.db.recarregar) S.db.recarregar(); });
 }

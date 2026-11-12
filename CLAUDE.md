@@ -8,7 +8,7 @@ Sistema pessoal de gerenciamento de estudos do Rafael: planeja as aulas da facul
 
 O mesmo código roda em dois lugares, escolhidos em `boot()` (`naWeb()`):
 
-- **Site no Vercel** (`publico/`, gerado pelo `montar.js`): dados no **Supabase** (tabela `documentos`, uma linha por documento, protegida por RLS), login com código de 6 dígitos no e-mail, e o calendário que o iPhone assina (função `calendario`).
+- **Site no Vercel** (`publico/`, gerado pelo `montar.js`): dados no **Supabase** (tabela `documentos`, uma linha por documento, protegida por RLS), entrada com e-mail e senha (criar conta, esqueci a senha; o Supabase só deixa mudar o texto dos e-mails com SMTP próprio, por isso não usamos código por e-mail), e o calendário que o iPhone assina (função `calendario`).
 - **Artefato do claude.ai** (https://claude.ai/artifact/LazjqpYBaArfHZSXkLo4tj, privado, `index.html`): dados no banco do artefato.
 
 `bancoSupabase()` em `src/app.js` imita a interface do banco do artefato (`collection().onSnapshot`, `doc().set`, `doc().delete`): o resto do app não sabe onde os dados estão. Sem servidor próprio e sem dependências de build.

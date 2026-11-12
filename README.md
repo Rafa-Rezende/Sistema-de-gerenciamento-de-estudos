@@ -34,7 +34,7 @@ Sem dependências: só o Node 20 ou mais novo.
 
 O mesmo código roda em dois lugares:
 
-- **Site** (Vercel): dados no Supabase, login com código no e-mail, calendário que o iPhone assina.
+- **Site** (Vercel): dados no Supabase, entrada com e-mail e senha, calendário que o iPhone assina.
 - **Artefato do claude.ai**: dados no banco do artefato (como era no começo).
 
 | | |
@@ -48,14 +48,11 @@ O mesmo código roda em dois lugares:
 
 1. **Supabase → New project.** Anote a senha do banco num lugar seguro.
 2. **SQL Editor → New query:** cole `supabase/migracoes/001_rota.sql` → **Run**.
-3. **Authentication → Emails → Templates:** em **Confirm signup** e em **Magic Link**, troque o corpo para mostrar o código:
-   ```html
-   <h2>Seu código do Rota</h2><p>{{ .Token }}</p>
-   ```
+3. **Authentication → Sign In / Providers → Email:** desligue **Confirm email** e salve (a entrada é por e-mail e senha; sem isso o Supabase exige confirmar por e-mail). Deixe **Enable custom SMTP** desligado em Authentication → Emails.
 4. **Project Settings → API:** copie a **Project URL** e a chave **anon public** para o `config.json`.
 5. **Vercel → Add New → Project:** importe este repositório e clique em **Deploy** (o `vercel.json` já diz o resto). Cada push no `main` publica de novo.
 6. **Authentication → URL Configuration:** em **Site URL**, coloque o endereço do Vercel.
-7. Abra o site, entre com o seu e-mail e o código.
+7. Abra o site e toque em **Primeira vez? Criar conta** (senha com pelo menos 8 caracteres).
 8. **Authentication → Sign In / Providers:** desligue **Allow new users to sign up**, para ninguém mais criar conta.
 9. **Função do calendário**, do seu computador, na pasta do repositório:
    ```bash
