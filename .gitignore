@@ -5,3 +5,4 @@ node_modules/
 # Claude Code: a configuração do projeto vai para o git; o que é só desta máquina não
 .claude/settings.local.json
 .claude/launch.json
+marca/fonte/
