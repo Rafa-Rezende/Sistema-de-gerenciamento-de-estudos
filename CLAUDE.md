@@ -2,7 +2,7 @@
 
 Sistema pessoal de gerenciamento de estudos do Rafael: planeja as aulas da faculdade em partes de 30 min, encaixa nos horários livres entre os turnos da pizzaria, refaz o plano quando aparece um imprevisto, acompanha prazos e o treino de código, e manda a agenda para o calendário do iPhone. Produto, usuário e regras de texto no [PRODUCT.md](PRODUCT.md).
 
-É um projeto pessoal, de uma pessoa só. Não tem relação com o repositório `gestor-estudos` (trabalho da disciplina de DevOps).
+É um projeto pessoal, de uma pessoa só.
 
 ## Como roda
 
